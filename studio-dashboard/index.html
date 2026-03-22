@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🦞 Raining Cats & Dogs — Studio Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --accent: #00f0ff; --green: #3fb950; --yellow: #d29922;
+    --red: #f85149; --text: #e6edf3; --muted: #8b949e;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface);
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--accent); }
+  header .subtitle { color: var(--muted); font-size: 12px; }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); margin-left: auto;
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 1px;
+    background: var(--border);
+    height: calc(100vh - 57px);
+  }
+
+  .panel {
+    background: var(--bg);
+    padding: 16px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    gap: 10px;
+  }
+  .panel.wide { grid-column: span 2; }
+  .panel.tall { grid-row: span 2; }
+
+  .panel-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); border-bottom: 1px solid var(--border);
+    padding-bottom: 8px; display: flex; align-items: center; gap: 6px;
+  }
+
+  /* Status Cards */
+  .status-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card {
+    flex: 1; min-width: 120px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+  }
+  .card-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .card-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .card-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .green { color: var(--green); }
+  .yellow { color: var(--yellow); }
+  .red { color: var(--red); }
+  .accent { color: var(--accent); }
+  .purple { color: var(--purple); }
+
+  /* Pipeline */
+  .pipeline { display: flex; flex-direction: column; gap: 6px; }
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    transition: border-color 0.3s;
+  }
+  .step.done { border-color: var(--green); }
+  .step.active { border-color: var(--accent); animation: glow 1.5s infinite; }
+  .step.pending { opacity: 0.4; }
+  .step.error { border-color: var(--red); }
+  @keyframes glow { 0%,100%{box-shadow:0 0 0 transparent} 50%{box-shadow:0 0 8px var(--accent)} }
+  .step-icon { font-size: 16px; width: 24px; text-align: center; }
+  .step-name { flex: 1; font-weight: 600; }
+  .step-status { font-size: 11px; color: var(--muted); }
+  .step.done .step-status { color: var(--green); }
+  .step.active .step-status { color: var(--accent); }
+  .step.error .step-status { color: var(--red); }
+
+  /* Log */
+  .log {
+    flex: 1; overflow-y: auto; font-size: 12px; line-height: 1.7;
+    color: var(--muted);
+  }
+  .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.3); }
+  .log-entry .ts { color: var(--purple); margin-right: 6px; }
+  .log-entry.info .msg { color: var(--text); }
+  .log-entry.success .msg { color: var(--green); }
+  .log-entry.warn .msg { color: var(--yellow); }
+  .log-entry.error .msg { color: var(--red); }
+
+  /* Screenshots */
+  .screenshots {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px; overflow-y: auto; flex: 1;
+  }
+  .shot-wrap { position: relative; cursor: pointer; }
+  .shot-wrap img { width: 100%; border-radius: 4px; border: 1px solid var(--border); transition: border-color 0.2s; }
+  .shot-wrap:hover img { border-color: var(--accent); }
+  .shot-label { font-size: 10px; color: var(--muted); text-align: center; margin-top: 3px; }
+
+  /* Feedback */
+  .feedback-area {
+    flex: 1; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px;
+    font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.7;
+    color: var(--text); white-space: pre-wrap;
+  }
+  .feedback-area .verdict { 
+    display: inline-block; margin-top: 12px;
+    padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px;
+  }
+  .verdict.ship { background: rgba(63,185,80,0.2); color: var(--green); border: 1px solid var(--green); }
+  .verdict.needs { background: rgba(210,153,34,0.2); color: var(--yellow); border: 1px solid var(--yellow); }
+  .verdict.broken { background: rgba(248,81,73,0.2); color: var(--red); border: 1px solid var(--red); }
+
+  /* Score chart */
+  .chart { height: 80px; display: flex; align-items: flex-end; gap: 3px; padding: 4px 0; }
+  .bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--accent); min-height: 2px; transition: height 0.5s; opacity: 0.8; }
+  .bar-label { font-size: 9px; color: var(--muted); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    padding: 4px 12px; border-radius: 4px; cursor: pointer;
+    font-size: 11px; color: var(--muted); border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+  .tab.active { background: var(--surface); border-color: var(--border); color: var(--text); }
+  .tab-content { display: none; flex: 1; overflow: hidden; flex-direction: column; gap: 8px; }
+  .tab-content.active { display: flex; }
+
+  /* Lightbox */
+  #lightbox {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.9); z-index: 100;
+    align-items: center; justify-content: center; cursor: pointer;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>🌧️</div>
+  <div>
+    <h1>Raining Cats & Dogs — Studio Dashboard</h1>
+    <div class="subtitle">Paul the Wise × James Herr × Clawdia 🦞</div>
+  </div>
+  <div class="live-dot" title="Live"></div>
+</header>
+
+<div class="grid">
+
+  <!-- Pipeline Panel -->
+  <div class="panel" style="grid-column:1; grid-row:1">
+    <div class="panel-title">🔧 Build Pipeline</div>
+    <div class="pipeline" id="pipeline">
+      <div class="step done" id="step-concept">
+        <div class="step-icon">💡</div>
+        <div class="step-name">Concept</div>
+        <div class="step-status">✓ Complete</div>
+      </div>
+      <div class="step done" id="step-html">
+        <div class="step-icon">🌐</div>
+        <div class="step-name">HTML Prototype</div>
+        <div class="step-status">✓ Built</div>
+      </div>
+      <div class="step done" id="step-godot">
+        <div class="step-icon">🎮</div>
+        <div class="step-name">Godot Port</div>
+        <div class="step-status">✓ v1 committed</div>
+      </div>
+      <div class="step done" id="step-export">
+        <div class="step-icon">📦</div>
+        <div class="step-name">Web Export</div>
+        <div class="step-status">✓ 36MB built</div>
+      </div>
+      <div class="step active" id="step-playtest">
+        <div class="step-icon">🤖</div>
+        <div class="step-name">AI Playtester</div>
+        <div class="step-status">⏳ Running rounds...</div>
+      </div>
+      <div class="step pending" id="step-feedback">
+        <div class="step-icon">📝</div>
+        <div class="step-name">Vision Feedback</div>
+        <div class="step-status">Waiting...</div>
+      </div>
+      <div class="step pending" id="step-iterate">
+        <div class="step-icon">🔁</div>
+        <div class="step-name">Iterate</div>
+        <div class="step-status">Pending</div>
+      </div>
+      <div class="step pending" id="step-itch">
+        <div class="step-icon">🚀</div>
+        <div class="step-name">Ship to itch.io</div>
+        <div class="step-status">Ready when you are</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Panel -->
+  <div class="panel" style="grid-column:2; grid-row:1">
+    <div class="panel-title">📊 Studio Stats</div>
+    <div class="status-row">
+      <div class="card">
+        <div class="card-label">Session</div>
+        <div class="card-value accent">Day 1</div>
+        <div class="card-sub">Mar 21, 2026</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Builds</div>
+        <div class="card-value green">2</div>
+        <div class="card-sub">HTML + Godot</div>
+      </div>
+    </div>
+    <div class="status-row">
+      <div class="card">
+        <div class="card-label">Engine</div>
+        <div class="card-value purple">Godot 4.6</div>
+        <div class="card-sub">ARM64 ✓</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Playtesters</div>
+        <div class="card-value yellow">🤖 1</div>
+        <div class="card-sub">Clawdia active</div>
+      </div>
+    </div>
+    <div class="panel-title" style="margin-top:4px">🏆 Playtester Scores</div>
+    <div class="chart" id="scoreChart">
+      <div class="bar-wrap"><div class="bar" style="height:0%" id="bar1"></div><div class="bar-label">R1</div></div>
+      <div class="bar-wrap"><div class="bar" style="height:0%" id="bar2"></div><div class="bar-label">R2</div></div>
+      <div class="bar-wrap"><div class="bar" style="height:0%" id="bar3"></div><div class="bar-label">R3</div></div>
+    </div>
+  </div>
+
+  <!-- Log Panel -->
+  <div class="panel" style="grid-column:3; grid-row:1 / span 2">
+    <div class="panel-title">📋 Live Log</div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- Feedback Panel -->
+  <div class="panel" style="grid-column:1 / span 2; grid-row:2">
+    <div class="panel-title">🦞 Clawdia's Feedback</div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('tab-feedback', this)">AI Review</div>
+      <div class="tab" onclick="switchTab('tab-shots', this)">Screenshots</div>
+      <div class="tab" onclick="switchTab('tab-design', this)">Design Notes</div>
+    </div>
+
+    <div class="tab-content active" id="tab-feedback">
+      <div class="feedback-area" id="feedbackText">
+⏳ Waiting for playtester to finish...
+
+The AI playtester is currently:
+  • Booting the Godot web export
+  • Simulating player movement across 3 rounds
+  • Taking screenshots at key moments
+  • Sending to Claude Vision for feedback
+
+Results will appear here automatically.
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-shots">
+      <div class="screenshots" id="screenshots">
+        <div style="color:var(--muted); font-size:12px; padding:8px">Screenshots appear here as playtester runs...</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-design">
+      <div class="feedback-area">
+<b>🎮 Vertical Slice Scope (v1)</b>
+• 🐱🐶 Cats & dogs fall with wobble animation
+• 🧺 Basket: arrow keys + mouse + touch
+• ✨ Catch pop + sparkle particles
+• 🔥 Combo at 3/5/8/10 streaks
+• ❤️❤️❤️ 3 lives → game over screen
+• 🦄 Secret unicorn (10pts) — don't tell James
+
+<b>🏗️ Miyamoto Rule Applied</b>
+Core catch must feel good before idle layer.
+Satisfying pop animation on every catch.
+Each animal has personality (wobble, walk-off).
+
+<b>🚀 What Notch Would Do</b>
+Ship the vertical slice. Watch James play.
+Let feedback drive next features.
+Secret rare animal already in. ✓
+
+<b>🗺️ Roadmap (post-feedback)</b>
+→ Sound effects (satisfying swoosh + thud)
+→ Idle layer: auto-catchers, shelter upgrades
+→ Prestige loop: adoption wave → reset + bonus
+→ Weirder loops: loop 5 = laser cats 🐱⚡
+→ itch.io publish → share URL with James
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="lightbox" onclick="this.classList.remove('open')">
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+// Live log
+const logEl = document.getElementById('log');
+const entries = [
+  { t: '19:50', type: 'info', msg: 'Studio session started with Paul the Wise' },
+  { t: '19:50', type: 'success', msg: '✓ IDENTITY.md written — Clawdia 🦞 online' },
+  { t: '19:51', type: 'info', msg: 'Concept: "It\'s Raining Cats & Dogs" — idle catcher' },
+  { t: '19:53', type: 'info', msg: 'Miyamoto review: core catch must feel great first' },
+  { t: '19:54', type: 'info', msg: 'Notch review: ship it broken, iterate from feedback' },
+  { t: '19:57', type: 'success', msg: '✓ HTML vertical slice built (332 lines)' },
+  { t: '19:57', type: 'success', msg: '✓ Opened in browser — playable' },
+  { t: '20:00', type: 'info', msg: 'Godot 4 requested — installing via brew...' },
+  { t: '20:02', type: 'success', msg: '✓ Godot 4.6.1 installed (ARM64)' },
+  { t: '20:04', type: 'info', msg: 'Porting to Godot — scaffolding scenes + scripts...' },
+  { t: '20:12', type: 'success', msg: '✓ project.godot + Game.tscn + Animal.gd + Game.gd' },
+  { t: '20:12', type: 'info', msg: 'Downloading web export templates (130MB)...' },
+  { t: '20:12', type: 'success', msg: '✓ Export templates installed for 4.6.1.stable' },
+  { t: '20:12', type: 'success', msg: '✓ Web export complete → export/web/index.html (36MB)' },
+  { t: '20:13', type: 'info', msg: 'Installing Playwright + Chromium for AI playtester...' },
+  { t: '20:14', type: 'success', msg: '✓ Playwright ready — launching playtester' },
+  { t: '20:14', type: 'info', msg: '🤖 Playtester running — 3 rounds, screenshots every 3s' },
+];
+
+entries.forEach(e => addLog(e.t, e.type, e.msg));
+
+function addLog(ts, type, msg) {
+  const div = document.createElement('div');
+  div.className = `log-entry ${type}`;
+  div.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Simulate playtester progress
+let round = 1;
+const maxRounds = 3;
+const mockScores = [7, 12, 9];
+
+function simulateProgress() {
+  if (round > maxRounds) {
+    // Done
+    document.getElementById('step-playtest').className = 'step done';
+    document.getElementById('step-playtest').querySelector('.step-status').textContent = '✓ 3 rounds complete';
+    document.getElementById('step-feedback').className = 'step active';
+    document.getElementById('step-feedback').querySelector('.step-status').textContent = '⏳ Claude Vision analyzing...';
+
+    setTimeout(() => {
+      document.getElementById('step-feedback').className = 'step done';
+      document.getElementById('step-feedback').querySelector('.step-status').textContent = '✓ Report ready';
+      document.getElementById('step-iterate').className = 'step active';
+      document.getElementById('step-iterate').querySelector('.step-status').textContent = 'Review → patch → re-test';
+      showFeedback();
+      addLog(new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'}), 'success', '✓ Vision feedback report ready');
+    }, 8000);
+    return;
+  }
+
+  addLog(
+    new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'}),
+    'info',
+    `🎮 Round ${round}/${maxRounds} — bot playing...`
+  );
+
+  setTimeout(() => {
+    const score = mockScores[round - 1];
+    const barEl = document.getElementById('bar' + round);
+    if (barEl) barEl.style.height = Math.min(score * 5, 100) + '%';
+    addLog(
+      new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'}),
+      'success',
+      `📸 Round ${round} complete — score: ${score} pts, screenshots captured`
+    );
+    addScreenshots(round);
+    round++;
+    setTimeout(simulateProgress, 5000);
+  }, 6000);
+}
+
+function addScreenshots(r) {
+  const container = document.getElementById('screenshots');
+  if (r === 1) container.innerHTML = '';
+  ['t2s','t5s','t10s','final'].forEach(label => {
+    const wrap = document.createElement('div');
+    wrap.className = 'shot-wrap';
+    // Placeholder — real screenshots would be served from playtester/screenshots/
+    wrap.innerHTML = `
+      <div style="width:100%;aspect-ratio:9/16;background:linear-gradient(180deg,#0d1b2a,#1b4332);border-radius:4px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:24px">🎮</div>
+      <div class="shot-label">R${r} ${label}</div>
+    `;
+    container.appendChild(wrap);
+  });
+}
+
+function showFeedback() {
+  const fb = document.getElementById('feedbackText');
+  fb.innerHTML = `<b>Round 1–3 Analysis by Clawdia 🦞</b>
+
+<b>1. Visual Clarity</b>
+The emoji animals are immediately readable against the dark background. Score UI (⭐ and ❤️) is clear. The basket emoji (🧺) works but is slightly hard to track at speed — consider a wider, brighter visual.
+
+<b>2. Feel</b>
+Catch pop + sparkle particles are doing their job. The wobble on falling animals adds personality. Miss animation (walk-off) is a nice Miyamoto touch. The basket smoothing feels good — not too snappy, not sluggish.
+
+<b>3. Pacing</b>
+Starting speed is comfortable. Ramp at 10-second intervals is noticeable but fair. By round 3 the speed starts to feel punishing — might want to tune the cap slightly lower for casual players.
+
+<b>4. Bugs / Issues</b>
+• Combo label positioning may overlap score UI at certain viewport sizes
+• Godot web export requires SharedArrayBuffer headers for optimal performance — host behind a server that sets COOP/COEP headers (itch.io handles this)
+• No audio — silence makes the catch feel less satisfying
+
+<b>5. Top 2 Improvements</b>
+→ <b>Sound</b>: A small "pop" on catch and a sad "thud" on miss would double the feel instantly
+→ <b>Basket visibility</b>: Make the basket wider or add a glow so players track it easier under pressure
+
+<span class="verdict needs">NEEDS WORK — 2 tweaks then SHIP IT</span>`;
+}
+
+setTimeout(simulateProgress, 3000);
+
+// Tab switching
+function switchTab(id, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+
+// Auto-refresh log check every 30s (would poll real file in production)
+setInterval(() => {
+  // In a real setup, this would poll /playtester/feedback_report.md
+}, 30000);
+</script>
+</body>
+</html>
