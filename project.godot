@@ -1,0 +1,24 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; but feel free to edit it if you know what you're doing.
+
+config_version=5
+
+[application]
+
+config/name="It's Raining Cats & Dogs"
+config/description="Catch cats and dogs falling from the sky!"
+run/main_scene="res://scenes/Game.tscn"
+config/features=PackedStringArray("4.6", "Web")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=400
+window/size/viewport_height=600
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
