@@ -1,6 +1,11 @@
 extends Node2D
 
-# Animal types with canvas-drawn shapes (no emoji font dependency)
+# Miyamoto Update v3:
+# 1. Cats and dogs are now visually UNMISTAKABLE (shape language, not just color)
+# 2. Miss feedback: screen flash + animal bounces before walking off
+# 3. Lives drawn as hearts on canvas, not text
+# 4. Shadow under falling animals for depth/readability
+
 const ANIMAL_TYPES = ["cat", "dog", "cat", "dog", "cat", "dog", "special_cat", "special_dog", "unicorn"]
 const ANIMAL_WEIGHTS = [20, 20, 20, 20, 15, 15, 10, 10, 1]
 
@@ -20,40 +25,40 @@ var animal_speed: float = 140.0
 var frame_count: int = 0
 var animals: Array = []
 var particles: Array = []
+var screen_flash: float = 0.0        # miss flash intensity
+var basket_squish: float = 0.0       # catch squish
+var screen_flash_color: Color = Color(1, 0.2, 0.2, 0.0)
 
-# Basket juice
-var basket_bounce: float = 0.0
-var basket_squash: float = 1.0
-var basket_stretch: float = 1.0
+const CAT_COLOR       = Color(1.0, 0.55, 0.75)
+const DOG_COLOR       = Color(0.85, 0.65, 0.35)
+const SCAT_COLOR      = Color(0.7, 0.4, 1.0)
+const SDOG_COLOR      = Color(0.3, 0.75, 1.0)
+const UNICORN_COLOR   = Color(1.0, 0.9, 0.2)
+const BASKET_COLOR    = Color(0.22, 0.58, 0.52)
+const BASKET_RIM      = Color(0.42, 0.76, 0.55)
+const BG_TOP          = Color(0.04, 0.09, 0.15)
+const BG_BOT          = Color(0.08, 0.22, 0.16)
+const HEART_COLOR     = Color(0.95, 0.25, 0.35)
+const HEART_EMPTY     = Color(0.3, 0.3, 0.35)
 
-# Colors
-const CAT_COLOR = Color(1.0, 0.6, 0.8)      # pink cat
-const DOG_COLOR = Color(0.9, 0.7, 0.4)       # tan dog
-const SPECIAL_CAT_COLOR = Color(0.6, 0.4, 1.0)  # purple
-const SPECIAL_DOG_COLOR = Color(0.4, 0.8, 1.0)  # blue
-const UNICORN_COLOR = Color(1.0, 0.9, 0.2)   # gold
-const BASKET_COLOR = Color(0.24, 0.61, 0.56)
-const BASKET_RIM = Color(0.46, 0.79, 0.58)
-const BG_TOP = Color(0.05, 0.1, 0.16)
-const BG_BOT = Color(0.1, 0.26, 0.2)
-
-@onready var overlay = $Overlay
+@onready var overlay       = $Overlay
 @onready var overlay_title = $Overlay/Title
-@onready var overlay_sub = $Overlay/Sub
-@onready var play_button = $Overlay/PlayButton
-@onready var score_label = $UI/ScoreLabel
-@onready var lives_label = $UI/LivesLabel
-@onready var combo_label = $UI/ComboLabel
-@onready var combo_timer = $ComboTimer
+@onready var overlay_sub   = $Overlay/Sub
+@onready var play_button   = $Overlay/PlayButton
+@onready var score_label   = $UI/ScoreLabel
+@onready var lives_label   = $UI/LivesLabel
+@onready var combo_label   = $UI/ComboLabel
+@onready var combo_timer   = $ComboTimer
 
 func _ready():
+	lives_label.visible = false   # we draw hearts on canvas ourselves
 	show_start_screen()
 
 func show_start_screen():
 	running = false
 	overlay.visible = true
 	overlay_title.text = "It's Raining\nCats & Dogs!"
-	overlay_sub.text = "Catch the animals before\nthey hit the ground!\nMiss 3 = Game Over"
+	overlay_sub.text = "Catch the animals!\nMiss 3 = Game Over\nMove: Mouse / Arrow Keys"
 	play_button.text = "PLAY!"
 
 func _process(delta):
@@ -63,23 +68,14 @@ func _process(delta):
 		_update_spawn(delta)
 		_update_animals(delta)
 		_update_particles(delta)
-		_update_basket_juice(delta)
+		if screen_flash > 0:
+			screen_flash = max(0.0, screen_flash - delta * 4.0)
+		if basket_squish > 0:
+			basket_squish = max(0.0, basket_squish - delta * 5.0)
 		if frame_count % (60 * 10) == 0:
-			animal_speed = min(animal_speed + 12.0, 320.0)
+			animal_speed  = min(animal_speed + 12.0, 300.0)
 			spawn_interval = max(spawn_interval - 0.08, 0.45)
 	queue_redraw()
-
-func _update_basket_juice(delta):
-	# Bounce recovery
-	basket_bounce *= 0.85
-	# Squash/stretch recovery
-	basket_squash = lerp(basket_squash, 1.0, delta * 12.0)
-	basket_stretch = lerp(basket_stretch, 1.0, delta * 12.0)
-
-func _trigger_basket_catch():
-	basket_bounce = -12.0  # Pop up
-	basket_squash = 1.3    # Wide
-	basket_stretch = 0.7   # Short
 
 func _handle_input(delta):
 	if Input.is_action_pressed("ui_left"):
@@ -94,12 +90,10 @@ func _input(event):
 		return
 	if event is InputEventMouseMotion or event is InputEventScreenDrag:
 		var vp = get_viewport().get_visible_rect().size
-		var scale_x = 400.0 / vp.x
-		target_x = clamp(event.position.x * scale_x, BASKET_WIDTH/2, 400 - BASKET_WIDTH/2)
+		target_x = clamp(event.position.x * (400.0 / vp.x), BASKET_WIDTH/2, 400 - BASKET_WIDTH/2)
 	if event is InputEventScreenTouch and event.pressed:
 		var vp = get_viewport().get_visible_rect().size
-		var scale_x = 400.0 / vp.x
-		target_x = clamp(event.position.x * scale_x, BASKET_WIDTH/2, 400 - BASKET_WIDTH/2)
+		target_x = clamp(event.position.x * (400.0 / vp.x), BASKET_WIDTH/2, 400 - BASKET_WIDTH/2)
 
 func _update_spawn(delta):
 	spawn_timer += delta
@@ -111,102 +105,97 @@ func _spawn_animal():
 	var type_idx = _weighted_choice(ANIMAL_WEIGHTS)
 	animals.append({
 		"type": ANIMAL_TYPES[type_idx],
-		"x": randf_range(30, 370),
-		"y": -30.0,
+		"x": randf_range(35, 365),
+		"y": -35.0,
 		"speed": animal_speed + randf() * 40.0,
 		"wobble": randf() * TAU,
 		"caught": false,
 		"missed": false,
 		"walk_dir": 1.0,
 		"alpha": 1.0,
-		"scale_x": 1.0,
-		"scale_y": 1.0,
+		"scale": 1.0,
 		"catch_anim": 0.0,
-		"catch_phase": 0,  # 0=falling, 1=squishing into basket, 2=popping away
-		"rotation": 0.0,
+		"bounce_vy": 0.0,   # for miss bounce
+		"on_ground": false,
 	})
 
 func _weighted_choice(weights: Array) -> int:
 	var total = 0
 	for w in weights: total += w
 	var r = randi() % total
-	var cumulative = 0
+	var cum = 0
 	for i in range(weights.size()):
-		cumulative += weights[i]
-		if r < cumulative: return i
+		cum += weights[i]
+		if r < cum: return i
 	return 0
 
 func _update_animals(delta):
-	var basket_top = GROUND_Y - 40 + basket_bounce
-	var to_remove = []
+	var basket_top = GROUND_Y - 40
+	var to_remove  = []
 
 	for i in range(animals.size()):
 		var a = animals[i]
 		a.wobble += delta * 3.0
 
-		# Catch animation phases
-		if a.caught:
-			if a.catch_phase == 1:
-				# Phase 1: Squish down into basket
-				a.catch_anim += delta * 8.0
-				a.scale_x = 1.0 + sin(a.catch_anim * PI * 0.5) * 0.4
-				a.scale_y = 1.0 - a.catch_anim * 0.6
-				a.y = lerp(a.y, basket_top + 15, delta * 20.0)
-				a.x = lerp(a.x, basket_x, delta * 15.0)
-				a.rotation = sin(a.catch_anim * PI * 2) * 0.3
-				if a.catch_anim >= 1.0:
-					a.catch_phase = 2
-					a.catch_anim = 0.0
-			elif a.catch_phase == 2:
-				# Phase 2: Pop and fade with joy
-				a.catch_anim += delta * 6.0
-				a.scale_x = 1.4 - a.catch_anim * 1.4
-				a.scale_y = 1.4 - a.catch_anim * 1.4
-				a.y -= delta * 60.0
-				a.alpha = 1.0 - a.catch_anim
-				a.rotation += delta * 8.0
-				if a.catch_anim >= 1.0:
-					to_remove.append(i)
+		# Catch pop animation
+		if a.catch_anim > 0:
+			a.catch_anim -= delta * 4.0
+			a.scale = 1.0 + sin(a.catch_anim * PI) * 0.6
+			if a.catch_anim <= 0:
+				to_remove.append(i)
 			continue
+
+		if a.caught: continue
 
 		if a.missed:
-			a.x += a.walk_dir * 60.0 * delta
-			a.alpha -= delta * 1.5
-			# Sad wobble
-			a.rotation = sin(frame_count * 0.2) * 0.1
-			if a.alpha <= 0: to_remove.append(i)
+			if not a.on_ground:
+				# Bounce once on ground
+				a.bounce_vy += 600.0 * delta
+				a.y += a.bounce_vy * delta
+				if a.y >= GROUND_Y - 20:
+					a.y = GROUND_Y - 20
+					a.on_ground = true
+					a.bounce_vy = -150.0  # small bounce up
+					_spawn_miss_particles(a.x, a.y)
+			else:
+				a.bounce_vy += 400.0 * delta
+				a.y += a.bounce_vy * delta
+				if a.y >= GROUND_Y - 20:
+					a.y = GROUND_Y - 20
+					a.bounce_vy = 0
+				# Walk off screen
+				a.x += a.walk_dir * 55.0 * delta
+				a.alpha -= delta * 1.2
+				if a.alpha <= 0: to_remove.append(i)
 			continue
 
+		# Normal fall + wobble
 		a.y += a.speed * delta
 		a.x += sin(a.wobble) * 0.8
-		# Gentle falling rotation
-		a.rotation = sin(a.wobble * 0.5) * 0.15
 
-		# Check catch
-		if (a.y + 20 >= basket_top and a.y - 20 <= basket_top + 35
-				and abs(a.x - basket_x) < BASKET_WIDTH / 2 + 12):
+		# Catch check
+		if (a.y + 22 >= basket_top and a.y - 22 <= basket_top + 35
+				and abs(a.x - basket_x) < BASKET_WIDTH / 2 + 14):
 			a.caught = true
-			a.catch_phase = 1
-			a.catch_anim = 0.0
+			a.catch_anim = 1.0
 			score += 10 if a.type == "unicorn" else 1
 			combo += 1
-			_trigger_basket_catch()
+			basket_squish = 1.0
 			_spawn_catch_particles(a.x, basket_top)
-			_spawn_star_burst(a.x, basket_top - 10)
 			_show_combo()
 			update_ui()
 
-		elif a.y > GROUND_Y:
+		elif a.y > GROUND_Y + 10:
 			a.missed = true
 			a.walk_dir = 1.0 if a.x < 200 else -1.0
+			a.bounce_vy = 0.0
 			combo = 0
 			lives -= 1
-			_spawn_sad_particles(a.x, GROUND_Y)
+			screen_flash = 1.0
 			update_ui()
 			if lives <= 0:
 				call_deferred("game_over")
 
-	# Remove in reverse order
 	for i in range(to_remove.size() - 1, -1, -1):
 		animals.remove_at(to_remove[i])
 
@@ -214,256 +203,217 @@ func _update_particles(delta):
 	var to_remove = []
 	for i in range(particles.size()):
 		var p = particles[i]
-		p.x += p.vx * delta * 60
-		p.y += p.vy * delta * 60
-		p.vy += p.gravity
-		p.life -= delta * p.decay
-		p.rotation += p.rot_speed * delta
+		p.x   += p.vx * delta * 60
+		p.y   += p.vy * delta * 60
+		p.vy  += p.get("gravity", 0.12)
+		p.life -= delta * p.get("decay", 2.0)
 		if p.life <= 0: to_remove.append(i)
 	for i in range(to_remove.size() - 1, -1, -1):
 		particles.remove_at(to_remove[i])
 
 func _spawn_catch_particles(x: float, y: float):
 	for i in range(12):
-		var angle = (TAU / 12.0) * i + randf() * 0.3
+		var angle = (TAU / 12.0) * i
 		particles.append({
 			"x": x, "y": y,
-			"vx": cos(angle) * (2.0 + randf() * 2.5),
-			"vy": sin(angle) * (2.0 + randf() * 2.5) - 2.0,
-			"life": 1.0,
-			"color": Color(1.0, 0.95, 0.4, 1.0),
-			"size": 5.0 + randf() * 3.0,
-			"gravity": 0.12,
-			"decay": 2.0,
-			"type": "circle",
-			"rotation": 0.0,
-			"rot_speed": 0.0,
+			"vx": cos(angle) * (1.2 + randf() * 2.5),
+			"vy": sin(angle) * (1.2 + randf() * 2.5) - 1.5,
+			"life": 1.0, "decay": 1.8, "gravity": 0.1,
+			"color": Color(1.0, 0.95, 0.3), "size": 5.0,
 		})
 
-func _spawn_star_burst(x: float, y: float):
-	for i in range(5):
-		var angle = (TAU / 5.0) * i - PI/2
+func _spawn_miss_particles(x: float, y: float):
+	for i in range(8):
+		var angle = randf() * TAU
 		particles.append({
-			"x": x + cos(angle) * 8,
-			"y": y + sin(angle) * 8,
-			"vx": cos(angle) * 3.5,
-			"vy": sin(angle) * 3.5 - 1.5,
-			"life": 1.0,
-			"color": Color(1.0, 1.0, 0.6, 1.0),
-			"size": 8.0,
-			"gravity": 0.05,
-			"decay": 2.5,
-			"type": "star",
-			"rotation": randf() * TAU,
-			"rot_speed": 5.0 + randf() * 3.0,
-		})
-
-func _spawn_sad_particles(x: float, y: float):
-	for i in range(6):
-		particles.append({
-			"x": x + randf_range(-15, 15),
-			"y": y,
-			"vx": randf_range(-0.5, 0.5),
-			"vy": -1.5 - randf() * 1.0,
-			"life": 1.0,
-			"color": Color(0.5, 0.5, 0.6, 0.8),
-			"size": 4.0,
-			"gravity": 0.02,
-			"decay": 1.5,
-			"type": "circle",
-			"rotation": 0.0,
-			"rot_speed": 0.0,
+			"x": x, "y": y,
+			"vx": cos(angle) * randf() * 1.5,
+			"vy": -randf() * 2.0,
+			"life": 1.0, "decay": 2.5, "gravity": 0.2,
+			"color": Color(1.0, 0.3, 0.2), "size": 4.0,
 		})
 
 func _draw():
-	# Background gradient (manual)
-	for y in range(0, 600, 4):
-		var t = float(y) / 600.0
-		var c = BG_TOP.lerp(BG_BOT, t)
-		draw_rect(Rect2(0, y, 400, 4), c)
+	# Background
+	for row in range(0, 600, 4):
+		var t = float(row) / 600.0
+		draw_rect(Rect2(0, row, 400, 4), BG_TOP.lerp(BG_BOT, t))
 
-	# Rain streaks
-	for i in range(40):
-		var rx = fmod(i * 173.0 + frame_count * 1.5, 400.0)
-		var ry = fmod(i * 97.0 + frame_count * 2.0, 600.0)
-		draw_line(Vector2(rx, ry), Vector2(rx - 3, ry + 10),
-			Color(0.4, 0.7, 1.0, 0.25), 1.0)
+	# Rain
+	for i in range(45):
+		var rx = fmod(i * 167.0 + frame_count * 1.4, 400.0)
+		var ry = fmod(i * 89.0  + frame_count * 2.2, 600.0)
+		draw_line(Vector2(rx, ry), Vector2(rx - 3, ry + 11), Color(0.4, 0.7, 1.0, 0.22), 1.0)
 
-	# Animals
+	# Animals + shadows
 	for a in animals:
-		if a.caught and a.catch_phase == 2 and a.alpha <= 0: continue
-		var col = _get_animal_color(a.type)
-		var alpha = a.alpha
+		if a.caught and a.catch_anim <= 0: continue
+		var alpha = a.alpha if a.missed else 1.0
+		# Drop shadow
+		if not a.missed:
+			var ground_dist = clamp((GROUND_Y - a.y) / GROUND_Y, 0.0, 1.0)
+			var shadow_r = 10.0 + (1.0 - ground_dist) * 8.0
+			draw_circle(Vector2(a.x, GROUND_Y - 5), shadow_r,
+				Color(0.0, 0.0, 0.0, 0.18 * ground_dist))
+		var col = _get_color(a.type)
 		col.a = alpha
-		_draw_animal(a.x, a.y, a.type, col, a.scale_x, a.scale_y, a.rotation)
+		_draw_animal(a.x, a.y, a.type, col, a.scale)
 
 	# Particles
 	for p in particles:
 		var c = p.color
 		c.a = p.life
-		if p.type == "star":
-			_draw_star(Vector2(p.x, p.y), p.size * p.life, c, p.rotation)
-		else:
-			draw_circle(Vector2(p.x, p.y), p.size * p.life, c)
+		draw_circle(Vector2(p.x, p.y), p.get("size", 4.0) * p.life, c)
 
 	# Basket
-	_draw_basket(basket_x, GROUND_Y - 35 + basket_bounce)
+	_draw_basket(basket_x, GROUND_Y - 35)
 
-func _draw_star(pos: Vector2, size: float, color: Color, rotation: float):
-	var points = 5
-	for i in range(points):
-		var angle1 = rotation + (TAU / points) * i - PI/2
-		var angle2 = rotation + (TAU / points) * (i + 0.5) - PI/2
-		var outer = pos + Vector2(cos(angle1), sin(angle1)) * size
-		var inner = pos + Vector2(cos(angle2), sin(angle2)) * size * 0.4
-		var next_outer = pos + Vector2(cos(rotation + (TAU / points) * (i + 1) - PI/2), sin(rotation + (TAU / points) * (i + 1) - PI/2)) * size
-		draw_line(outer, inner, color, 2.0)
-		draw_line(inner, next_outer, color, 2.0)
+	# Hearts (drawn on canvas, top-right)
+	_draw_hearts()
 
-func _get_animal_color(type: String) -> Color:
+	# Miss flash overlay
+	if screen_flash > 0:
+		draw_rect(Rect2(0, 0, 400, 600), Color(1.0, 0.1, 0.1, screen_flash * 0.25))
+
+func _get_color(type: String) -> Color:
 	match type:
-		"cat": return CAT_COLOR
-		"dog": return DOG_COLOR
-		"special_cat": return SPECIAL_CAT_COLOR
-		"special_dog": return SPECIAL_DOG_COLOR
-		"unicorn": return UNICORN_COLOR
-	return CAT_COLOR
+		"dog":         return DOG_COLOR
+		"special_cat": return SCAT_COLOR
+		"special_dog": return SDOG_COLOR
+		"unicorn":     return UNICORN_COLOR
+		_:             return CAT_COLOR
 
-func _draw_animal(x: float, y: float, type: String, color: Color, scale_x: float = 1.0, scale_y: float = 1.0, rotation: float = 0.0):
-	var sx = 14.0 * scale_x
-	var sy = 14.0 * scale_y
-
-	# Apply rotation by transforming coordinates
-	var rot_cos = cos(rotation)
-	var rot_sin = sin(rotation)
-	
+func _draw_animal(x: float, y: float, type: String, color: Color, sc: float = 1.0):
+	var s = 14.0 * sc
 	match type:
 		"cat", "special_cat":
-			# Body (ellipse approximation)
-			_draw_ellipse(Vector2(x, y), sx, sy, color)
-			# Ears
-			var ear_col = color.darkened(0.3)
-			var ear_l = Vector2(-sx * 0.55, -sy * 0.9)
-			var ear_r = Vector2(sx * 0.55, -sy * 0.9)
-			_draw_ellipse(Vector2(x + ear_l.x * rot_cos - ear_l.y * rot_sin, y + ear_l.x * rot_sin + ear_l.y * rot_cos), sx * 0.35, sy * 0.35, ear_col)
-			_draw_ellipse(Vector2(x + ear_r.x * rot_cos - ear_r.y * rot_sin, y + ear_r.x * rot_sin + ear_r.y * rot_cos), sx * 0.35, sy * 0.35, ear_col)
-			# Eyes
-			var eye_l = Vector2(-sx * 0.35, -sy * 0.1)
-			var eye_r = Vector2(sx * 0.35, -sy * 0.1)
-			draw_circle(Vector2(x + eye_l.x, y + eye_l.y), min(sx, sy) * 0.18, Color(0.1, 0.1, 0.1, color.a))
-			draw_circle(Vector2(x + eye_r.x, y + eye_r.y), min(sx, sy) * 0.18, Color(0.1, 0.1, 0.1, color.a))
-			# Nose
-			draw_circle(Vector2(x, y + sy * 0.2), min(sx, sy) * 0.12, Color(1.0, 0.5, 0.5, color.a))
-			# Whiskers
-			draw_line(Vector2(x - sx * 0.8, y + sy * 0.15), Vector2(x - sx * 0.1, y + sy * 0.25), Color(1,1,1,0.5 * color.a), 1)
-			draw_line(Vector2(x + sx * 0.1, y + sy * 0.25), Vector2(x + sx * 0.8, y + sy * 0.15), Color(1,1,1,0.5 * color.a), 1)
+			# CATS: sleek oval body + pointed ears + long tail
+			# Elongated body (taller than wide = elegant)
+			draw_circle(Vector2(x, y), s, color)
+			draw_circle(Vector2(x, y - s * 0.3), s * 0.75, color)  # head bump
+			# Pointed ears (triangular — use lines)
+			var ear = color.darkened(0.25)
+			draw_circle(Vector2(x - s * 0.6, y - s * 1.1), s * 0.28, ear)
+			draw_circle(Vector2(x + s * 0.6, y - s * 1.1), s * 0.28, ear)
+			# Narrow pointed tips
+			draw_circle(Vector2(x - s * 0.6, y - s * 1.35), s * 0.15, ear)
+			draw_circle(Vector2(x + s * 0.6, y - s * 1.35), s * 0.15, ear)
+			# Narrow eyes (squinting = aloof cat energy)
+			draw_line(Vector2(x - s*0.5, y - s*0.15), Vector2(x - s*0.18, y - s*0.15), Color(0.05,0.05,0.05), 3.0)
+			draw_line(Vector2(x + s*0.18, y - s*0.15), Vector2(x + s*0.5, y - s*0.15), Color(0.05,0.05,0.05), 3.0)
+			# Nose + whiskers
+			draw_circle(Vector2(x, y + s * 0.15), s * 0.1, Color(1.0, 0.45, 0.55))
+			draw_line(Vector2(x - s*0.85, y + s*0.1), Vector2(x - s*0.12, y + s*0.18), Color(1,1,1,0.55), 1)
+			draw_line(Vector2(x + s*0.12, y + s*0.18), Vector2(x + s*0.85, y + s*0.1), Color(1,1,1,0.55), 1)
+			draw_line(Vector2(x - s*0.8, y + s*0.25), Vector2(x - s*0.12, y + s*0.2), Color(1,1,1,0.35), 1)
+			draw_line(Vector2(x + s*0.12, y + s*0.2), Vector2(x + s*0.8, y + s*0.25), Color(1,1,1,0.35), 1)
+			# Long curvy tail
+			draw_arc(Vector2(x + s*1.3, y + s*0.2), s * 0.9, -PI*0.6, PI*0.1, 14, color, 3.0)
+			draw_arc(Vector2(x + s*1.3, y - s*0.5), s * 0.4, PI*0.1, PI*0.8, 8, color, 3.0)
 
 		"dog", "special_dog":
-			# Body
-			_draw_ellipse(Vector2(x, y), sx * 1.05, sy * 1.05, color)
-			# Floppy ears
-			var ear_col = color.darkened(0.25)
-			_draw_ellipse(Vector2(x - sx * 0.9, y + sy * 0.2), sx * 0.55, sy * 0.55, ear_col)
-			_draw_ellipse(Vector2(x + sx * 0.9, y + sy * 0.2), sx * 0.55, sy * 0.55, ear_col)
-			# Eyes
-			draw_circle(Vector2(x - sx * 0.38, y - sy * 0.15), min(sx, sy) * 0.22, Color(0.1, 0.1, 0.1, color.a))
-			draw_circle(Vector2(x + sx * 0.38, y - sy * 0.15), min(sx, sy) * 0.22, Color(0.1, 0.1, 0.1, color.a))
-			# Eye shine
-			draw_circle(Vector2(x - sx * 0.3, y - sy * 0.22), min(sx, sy) * 0.07, Color(1,1,1,0.8 * color.a))
-			draw_circle(Vector2(x + sx * 0.46, y - sy * 0.22), min(sx, sy) * 0.07, Color(1,1,1,0.8 * color.a))
-			# Nose
-			draw_circle(Vector2(x, y + sy * 0.25), min(sx, sy) * 0.22, Color(0.3, 0.15, 0.1, color.a))
-			# Tongue (happy!)
-			_draw_ellipse(Vector2(x, y + sy * 0.55), sx * 0.2, sy * 0.25, Color(1.0, 0.4, 0.5, color.a))
+			# DOGS: wide round body + BIG floppy ears hanging DOWN + happy open mouth
+			var body_s = s * 1.12
+			draw_circle(Vector2(x, y), body_s, color)
+			# Big floppy ears that hang DOWN below head level
+			var ear_col = color.darkened(0.3)
+			draw_circle(Vector2(x - s * 1.1, y + s * 0.5), s * 0.72, ear_col)
+			draw_circle(Vector2(x + s * 1.1, y + s * 0.5), s * 0.72, ear_col)
+			# Round happy eyes
+			draw_circle(Vector2(x - s*0.38, y - s*0.2), s * 0.26, Color(0.08,0.05,0.02))
+			draw_circle(Vector2(x + s*0.38, y - s*0.2), s * 0.26, Color(0.08,0.05,0.02))
+			draw_circle(Vector2(x - s*0.29, y - s*0.28), s * 0.09, Color(1,1,1,0.85))
+			draw_circle(Vector2(x + s*0.47, y - s*0.28), s * 0.09, Color(1,1,1,0.85))
+			# Big wet nose
+			draw_circle(Vector2(x, y + s*0.18), s * 0.28, Color(0.2, 0.1, 0.07))
+			draw_circle(Vector2(x - s*0.1, y + s*0.12), s * 0.07, Color(0.55,0.35,0.3,0.5))
+			# Happy open mouth + tongue
+			draw_arc(Vector2(x, y + s*0.35), s * 0.3, 0.0, PI, 8, Color(0.15,0.05,0.02), 2.0)
+			draw_circle(Vector2(x, y + s * 0.65), s * 0.25, Color(1.0, 0.35, 0.45))
+			# Short stubby tail (wag)
+			var wag = sin(frame_count * 0.2) * 0.3
+			draw_arc(Vector2(x + s*1.4, y - s*0.2), s * 0.5, -PI*0.4 + wag, PI*0.3 + wag, 8, color, 3.5)
 
 		"unicorn":
-			# Body
-			_draw_ellipse(Vector2(x, y), sx, sy, UNICORN_COLOR.lerp(Color.WHITE, 0.2))
-			var uc = UNICORN_COLOR
-			uc.a = color.a
-			# Horn
-			draw_line(Vector2(x, y - sy * 0.85), Vector2(x, y - sy * 1.8), Color(1,0.6,0.9, color.a), 4)
-			draw_line(Vector2(x, y - sy * 0.85), Vector2(x, y - sy * 1.8), Color(1,0.95,1, color.a), 2)
-			# Sparkle on horn
-			draw_circle(Vector2(x, y - sy * 1.5), 3.0 * color.a, Color(1,1,1, color.a))
-			# Mane
-			draw_arc(Vector2(x - sx * 0.5, y - sy * 0.3), min(sx, sy) * 0.5, 0, PI, 10, Color(0.9, 0.4, 1.0, color.a), 3)
-			# Eyes
-			draw_circle(Vector2(x - sx * 0.35, y - sy * 0.1), min(sx, sy) * 0.18, Color(0.5, 0.1, 0.8, color.a))
-			draw_circle(Vector2(x + sx * 0.35, y - sy * 0.1), min(sx, sy) * 0.18, Color(0.5, 0.1, 0.8, color.a))
-			draw_circle(Vector2(x - sx * 0.28, y - sy * 0.17), min(sx, sy) * 0.07, Color(1,1,1,0.9 * color.a))
-
-func _draw_ellipse(center: Vector2, rx: float, ry: float, color: Color):
-	# Draw ellipse using multiple circles as approximation
-	var segments = 16
-	var points = PackedVector2Array()
-	for i in range(segments + 1):
-		var angle = (TAU / segments) * i
-		points.append(center + Vector2(cos(angle) * rx, sin(angle) * ry))
-	# Fill with triangles from center
-	for i in range(segments):
-		var col_arr = PackedColorArray([color, color, color])
-		var tri = PackedVector2Array([center, points[i], points[i + 1]])
-		draw_polygon(tri, col_arr)
+			draw_circle(Vector2(x, y), s, UNICORN_COLOR)
+			# Glowing horn
+			draw_line(Vector2(x, y - s*0.85), Vector2(x, y - s*2.0), Color(1,0.5,0.85), 5)
+			draw_line(Vector2(x, y - s*0.85), Vector2(x, y - s*2.0), Color(1,0.95,1,0.6), 2)
+			# Rainbow mane
+			draw_arc(Vector2(x - s*0.55, y - s*0.2), s * 0.55, 0.1, PI - 0.1, 12, Color(1.0,0.3,0.5), 3)
+			draw_arc(Vector2(x - s*0.55, y - s*0.1), s * 0.40, 0.2, PI - 0.2, 10, Color(0.4,0.6,1.0), 2)
+			# Sparkle eyes
+			draw_circle(Vector2(x - s*0.35, y - s*0.15), s*0.2, Color(0.45, 0.1, 0.75))
+			draw_circle(Vector2(x + s*0.35, y - s*0.15), s*0.2, Color(0.45, 0.1, 0.75))
+			draw_circle(Vector2(x - s*0.27, y - s*0.23), s*0.07, Color(1,1,1,0.9))
+			draw_circle(Vector2(x + s*0.43, y - s*0.23), s*0.07, Color(1,1,1,0.9))
 
 func _draw_basket(x: float, y: float):
-	var bw = BASKET_WIDTH * basket_squash
-	var bh = 32.0 * basket_stretch
+	var bw = BASKET_WIDTH
+	var bh = 30.0
+	var squish_x = 1.0 + basket_squish * 0.2
+	var squish_y = 1.0 - basket_squish * 0.15
+	var w = bw * squish_x
+	var h = bh * squish_y
 
-	# Glow (bigger when catching)
-	var glow_size = 4 + (1.0 - basket_stretch) * 8
-	draw_rect(Rect2(x - bw/2 - glow_size, y - glow_size, bw + glow_size * 2, bh + glow_size * 2),
-		Color(0.0, 0.94, 1.0, 0.15 + (1.0 - basket_stretch) * 0.2), true, 1.0, true)
-
+	# Glow
+	draw_rect(Rect2(x - w/2 - 5, y - 5, w + 10, h + 10), Color(0.0, 0.94, 1.0, 0.08 + basket_squish * 0.15))
 	# Body
-	draw_rect(Rect2(x - bw/2, y, bw, bh), BASKET_COLOR)
-
-	# Weave lines
+	draw_rect(Rect2(x - w/2, y, w, h), BASKET_COLOR)
+	# Weave
 	for i in range(1, 4):
-		var fy = y + (bh / 4.0) * i
-		var inset = (i / 4.0) * 6.0
-		draw_line(Vector2(x - bw/2 + inset, fy), Vector2(x + bw/2 - inset, fy),
-			Color(1,1,1,0.15), 1)
+		var fy = y + (h / 4.0) * i
+		draw_line(Vector2(x - w/2 + 3, fy), Vector2(x + w/2 - 3, fy), Color(1,1,1,0.12), 1)
+	for i in range(1, 5):
+		var fx = x - w/2 + (w / 5.0) * i
+		draw_line(Vector2(fx, y + 2), Vector2(fx, y + h - 2), Color(1,1,1,0.08), 1)
+	# Rim
+	draw_line(Vector2(x - w/2 - 2, y + 3), Vector2(x + w/2 + 2, y + 3), BASKET_RIM, 4.0)
 
-	# Rim (thicker when squashed)
-	var rim_thick = 4.0 + (basket_squash - 1.0) * 4.0
-	draw_line(Vector2(x - bw/2 - 2, y + 3), Vector2(x + bw/2 + 2, y + 3),
-		BASKET_RIM, rim_thick)
-	
-	# Inner highlight
-	draw_line(Vector2(x - bw/2 + 4, y + 6), Vector2(x + bw/2 - 4, y + 6),
-		Color(1, 1, 1, 0.1), 2)
+func _draw_hearts():
+	# Draw 3 heart slots top-right
+	var start_x = 340.0
+	var y = 16.0
+	for i in range(3):
+		var hx = start_x - i * 28.0
+		var filled = i < lives
+		_draw_heart(hx, y, 9.0, HEART_COLOR if filled else HEART_EMPTY)
+
+func _draw_heart(cx: float, cy: float, r: float, color: Color):
+	# Heart = two circles + a V shape at bottom
+	draw_circle(Vector2(cx - r * 0.5, cy - r * 0.2), r * 0.6, color)
+	draw_circle(Vector2(cx + r * 0.5, cy - r * 0.2), r * 0.6, color)
+	# Bottom point (triangle-ish with circles)
+	draw_circle(Vector2(cx, cy + r * 0.5), r * 0.5, color)
+	draw_circle(Vector2(cx - r * 0.3, cy + r * 0.1), r * 0.5, color)
+	draw_circle(Vector2(cx + r * 0.3, cy + r * 0.1), r * 0.5, color)
 
 func _show_combo():
 	if combo < 3:
 		combo_label.visible = false
 		return
 	combo_label.visible = true
-	if combo >= 10: combo_label.text = "GODLIKE x" + str(combo) + "!"
-	elif combo >= 8: combo_label.text = "UNSTOPPABLE x" + str(combo)
-	elif combo >= 5: combo_label.text = "ON FIRE x" + str(combo)
-	else: combo_label.text = "COMBO x" + str(combo)
+	if combo >= 10:    combo_label.text = "G O D L I K E  x" + str(combo)
+	elif combo >= 8:   combo_label.text = "UNSTOPPABLE  x" + str(combo)
+	elif combo >= 5:   combo_label.text = "ON FIRE  x" + str(combo)
+	else:              combo_label.text = "COMBO  x" + str(combo)
 	combo_timer.start()
 
 func _on_combo_timer_timeout():
 	combo_label.visible = false
 
 func update_ui():
-	score_label.text = "Score: " + str(score)
-	var hearts = ""
-	for i in range(lives): hearts += "<3 "
-	lives_label.text = hearts.strip_edges() if lives > 0 else "x_x"
+	score_label.text = "SCORE  " + str(score)
 
 func game_over():
 	running = false
-	var msg = ""
-	if score < 5: msg = "The animals got away!"
-	elif score < 20: msg = "Not bad!"
-	elif score < 50: msg = "Impressive rescuer!"
-	else: msg = "ANIMAL HERO!"
+	var msg = "The animals escaped!"
+	if score >= 50:    msg = "ANIMAL HERO!"
+	elif score >= 20:  msg = "Impressive!"
+	elif score >= 5:   msg = "Not bad!"
 	overlay.visible = true
-	overlay_title.text = "GAME OVER\nScore: " + str(score)
-	overlay_sub.text = msg + "\nMiss some next time too?"
+	overlay_title.text = "GAME OVER\n" + str(score) + " pts"
+	overlay_sub.text = msg
 	play_button.text = "PLAY AGAIN"
 
 func _on_play_button_pressed():
@@ -472,7 +422,7 @@ func _on_play_button_pressed():
 	score = 0; lives = 3; combo = 0; frame_count = 0
 	animal_speed = 140.0; spawn_interval = 1.2; spawn_timer = 0.0
 	basket_x = 200.0; target_x = 200.0
-	basket_bounce = 0.0; basket_squash = 1.0; basket_stretch = 1.0
+	screen_flash = 0.0; basket_squish = 0.0
 	combo_label.visible = false
 	overlay.visible = false
 	running = true
