@@ -1,0 +1,22 @@
+# Godot
+.godot/
+*.tmp
+*.godot.lock
+
+# Export output (large WASM — too big for GitHub)
+export/
+
+# Node
+node_modules/
+
+# Playtester screenshots (auto-generated)
+playtester/screenshots/
+playtester/feedback_report.md
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+playwright-venv/
